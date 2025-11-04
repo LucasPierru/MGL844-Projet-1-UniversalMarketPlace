@@ -1,0 +1,118 @@
+@startuml Compact_SEI_ECom_CnC_v2
+' Compact SEI-style Component & Connector view (actor-free)
+' DB shown with JDBC access and entity components
+
+left to right direction
+skinparam dpi 140
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam ArrowColor #333
+
+title UniversalMarketPlace — Component & Connector View
+
+' System boundary
+rectangle "UniversalMarketPlace\n(<<system>>)" as SYS #eaf6e8 {
+  skinparam rectangle {
+    BackgroundColor #eaf6e8
+    BorderColor #88b379
+  }
+
+  ' Edge / API row
+  rectangle "API" as API {
+    [Load Balancer] as LB
+    [API Gateway\n] as APIGW
+  }
+
+  ' Core services (compact)
+  rectangle "Core Services" as CORE {
+    component "Servic Auth\n" as AuthSvc
+    component "Service Compte\n" as UserSvc
+    component "Service Produit\n" as ProductSvc
+    component "Service Mise\n" as BidSvc
+    component "Service Transaction\n" as TxSvc
+    component "Service Notification\n" as NotifSvc
+  }
+
+  ' Workers & infra
+  rectangle "Workers & Platform" as PLATFORM {
+    [Worker Pool\n(async jobs)] as Workers
+    queue "Message Broker\n(pub/sub, notifications)" as Broker
+  }
+
+
+
+  component "ProductEntity" as ProdEntity
+  component "BidEntity" as BidEntity
+  component "OrderEntity" as OrderEntity
+}
+
+' External services (outside)
+' Database and Entities (right side inside boundary)
+database "Primary Relational DB\n(Postgres) - JDBC" as DB
+cloud "CDN\n(Product images)" as CDN
+cloud "Redis Cache" as Redis
+cloud "Payment Provider\n(Stripe)" as PaymentExt
+cloud "Email/SMS Provider\n(SendGrid/Twilio)" as CommExt
+
+' ---------- Connectors ----------
+' Edge to API
+LB --> APIGW : TLS / routing
+CDN --> APIGW
+
+' API to services
+APIGW --> AuthSvc
+APIGW --> UserSvc
+APIGW --> ProductSvc
+APIGW --> BidSvc
+APIGW --> TxSvc
+APIGW --> NotifSvc
+
+' Services to DB (JDBC arrows labeled)
+AuthSvc --> DB
+UserSvc --> DB
+ProductSvc --> ProdEntity
+BidSvc --> BidEntity
+TxSvc --> OrderEntity
+
+' Entities -> DB (explicit, like your example)
+ProdEntity --> DB
+BidEntity --> DB
+OrderEntity --> DB
+
+' Redis
+Redis --> APIGW : sessions / cache
+
+' Broker (async notification flows)
+BidSvc -[#2E8B57]-> Broker : BidPlacedEvent <<async>>
+Broker -[#2E8B57]-> NotifSvc : deliver notifications <<async>>
+NotifSvc -[#2E8B57]-> Broker : subscribe / publish (notifications)
+
+' Supplier accept flow: BidSvc publishes acceptance to Broker which NotifSvc uses to notify client
+BidSvc -[#2E8B57]-> Broker : BidAcceptedEvent <<async>>
+
+' Transaction flow (NO broker between Bid acceptance and TxSvc)
+' After client confirms payment, TxSvc <-> Stripe and then TxSvc calls NotifSvc directly (sync)
+TxSvc --> PaymentExt : createPaymentIntent / charge
+PaymentExt --> TxSvc : webhook (payment result)
+TxSvc --> NotifSvc : POST /notify (payment result)  // direct call, NOT via Broker
+NotifSvc --> CommExt : send email/SMS (async external)
+
+' Workers for batch jobs (still can consume broker if needed)
+Workers --> Broker : consume bkg tasks
+Workers --> DB : write job results
+
+' Minimal notes
+note left of BidSvc
+  BidSvc responsibilities:
+  - manage bid lifecycle
+  - publish bid events to Broker for notifications
+end note
+
+legend right
+  |=| Solid = synchronous (HTTP/gRPC/JDBC)
+  |=| Green = asynchronous via Broker (pub/sub)
+  |db| = relational DB
+end legend
+
+@enduml
