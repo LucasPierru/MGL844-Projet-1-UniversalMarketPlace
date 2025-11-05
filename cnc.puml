@@ -4,15 +4,17 @@
 
 left to right direction
 skinparam dpi 140
-skinparam componentStyle rectangle
+/' skinparam componentStyle rectangle '/
 skinparam shadowing false
 skinparam defaultFontName "Arial"
 skinparam ArrowColor #333
+skinparam nodesep 20
+skinparam ranksep 30
 
 title UniversalMarketPlace — Component & Connector View
 
 ' System boundary
-rectangle "UniversalMarketPlace\n(<<system>>)" as SYS #eaf6e8 {
+component " " as SYS #eaf6e8 {
   skinparam rectangle {
     BackgroundColor #eaf6e8
     BorderColor #88b379
@@ -20,45 +22,50 @@ rectangle "UniversalMarketPlace\n(<<system>>)" as SYS #eaf6e8 {
 
   ' Edge / API row
   rectangle "API" as API {
-    [Load Balancer] as LB
+    [LB L7] as LB
     [API Gateway\n] as APIGW
   }
 
-  ' Core services (compact)
-  rectangle "Core Services" as CORE {
+
+  rectangle "Services" as Services {
     component "Servic Auth\n" as AuthSvc
     component "Service Compte\n" as UserSvc
     component "Service Produit\n" as ProductSvc
     component "Service Mise\n" as BidSvc
     component "Service Transaction\n" as TxSvc
     component "Service Notification\n" as NotifSvc
+    portout "Redis Cache" as RedisSvc
   }
+
 
   ' Workers & infra
-  rectangle "Workers & Platform" as PLATFORM {
-    [Worker Pool\n(async jobs)] as Workers
-    queue "Message Broker\n(pub/sub, notifications)" as Broker
+  /' [Worker Pool\n(async jobs)] as Workers '/
+  queue "Message Broker\n(pub/sub, notifications)" as Broker
+
+  ' Database entities
+  rectangle "Entities" as Entities {
+    component "UserEntity" as UserEntity
+    component "ProductEntity" as ProdEntity
+    component "BidEntity" as BidEntity
+    component "OrderEntity" as OrderEntity
   }
 
-
-
-  component "ProductEntity" as ProdEntity
-  component "BidEntity" as BidEntity
-  component "OrderEntity" as OrderEntity
+  ' Ports
+  portout "Database" as dbport
+  portin "Web Client" as webClient
+  portout "Logs" as Logs
+  port "Payment Provider\n(Stripe)" as PaymentExt
+  port " " as CommExt
 }
-
-' External services (outside)
-' Database and Entities (right side inside boundary)
-database "Primary Relational DB\n(Postgres) - JDBC" as DB
-cloud "CDN\n(Product images)" as CDN
-cloud "Redis Cache" as Redis
-cloud "Payment Provider\n(Stripe)" as PaymentExt
-cloud "Email/SMS Provider\n(SendGrid/Twilio)" as CommExt
-
 ' ---------- Connectors ----------
+' Client to Load Balancer
+webClient --> LB : <<HTTPS>>
+
 ' Edge to API
-LB --> APIGW : TLS / routing
-CDN --> APIGW
+LB --> APIGW : <<TLS / routing>>
+/' CDN --> APIGW : <<CDN>> '/
+' Redis
+RedisSvc --> Redis : cache
 
 ' API to services
 APIGW --> AuthSvc
@@ -69,45 +76,45 @@ APIGW --> TxSvc
 APIGW --> NotifSvc
 
 ' Services to DB (JDBC arrows labeled)
-AuthSvc --> DB
-UserSvc --> DB
+AuthSvc -r-> UserEntity
+UserSvc -r-> UserEntity
 ProductSvc --> ProdEntity
 BidSvc --> BidEntity
 TxSvc --> OrderEntity
 
 ' Entities -> DB (explicit, like your example)
-ProdEntity --> DB
-BidEntity --> DB
-OrderEntity --> DB
+UserEntity -right-> dbport
+ProdEntity -right-> dbport
+BidEntity -right-> dbport
+OrderEntity -right-> dbport
+/' dbport -b-> PostgreSQL '/
 
-' Redis
-Redis --> APIGW : sessions / cache
+
 
 ' Broker (async notification flows)
-BidSvc -[#2E8B57]-> Broker : BidPlacedEvent <<async>>
-Broker -[#2E8B57]-> NotifSvc : deliver notifications <<async>>
+BidSvc -[#2E8B57]-> Broker : BidPlacedEvent
+Broker -[#2E8B57]-> NotifSvc : deliver notifications
 NotifSvc -[#2E8B57]-> Broker : subscribe / publish (notifications)
 
 ' Supplier accept flow: BidSvc publishes acceptance to Broker which NotifSvc uses to notify client
-BidSvc -[#2E8B57]-> Broker : BidAcceptedEvent <<async>>
+BidSvc -[#2E8B57]-> Broker : BidAcceptedEvent
 
 ' Transaction flow (NO broker between Bid acceptance and TxSvc)
-' After client confirms payment, TxSvc <-> Stripe and then TxSvc calls NotifSvc directly (sync)
-TxSvc --> PaymentExt : createPaymentIntent / charge
-PaymentExt --> TxSvc : webhook (payment result)
-TxSvc --> NotifSvc : POST /notify (payment result)  // direct call, NOT via Broker
-NotifSvc --> CommExt : send email/SMS (async external)
+TxSvc -r-> PaymentExt : <<HTTPS>>
+/' TxSvc -r-> NotifSvc '/
+NotifSvc --> CommExt
+SMTP - CommExt
 
 ' Workers for batch jobs (still can consume broker if needed)
-Workers --> Broker : consume bkg tasks
-Workers --> DB : write job results
+/' Workers --> Broker : consume bkg tasks
+Workers --> dbport : write job results '/
 
 ' Minimal notes
-note left of BidSvc
+/' note left of BidSvc
   BidSvc responsibilities:
   - manage bid lifecycle
   - publish bid events to Broker for notifications
-end note
+end note '/
 
 legend right
   |=| Solid = synchronous (HTTP/gRPC/JDBC)

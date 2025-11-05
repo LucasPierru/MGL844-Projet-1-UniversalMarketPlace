@@ -1,0 +1,43 @@
+@startuml Compact_SEI_ECom_CnC_v2
+' Compact SEI-style Component & Connector view (actor-free)
+' DB shown with JDBC access and entity components
+
+/' left to right direction '/
+skinparam dpi 140
+/' skinparam componentStyle rectangle '/
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam ArrowColor #333
+/' skinparam nodesep 20
+skinparam ranksep 30 '/
+skinparam component { 
+  BackgroundColor #eaf6e8
+  BorderColor #88b379
+}
+
+title UniversalMarketPlace — Component & Connector View
+
+package "UniversalMarketPlace — Component & Connector View" {
+  component "Web Browser" as WB 
+  component "Web App" as WA 
+  component "API Gateway" as APIGW
+  component "<<Repository>>\nService Registry" as SR
+  component "Services" as Services
+  component "<<Repository>>\nUniversal Market\nPlace DB" as DB
+/'   component "Redis cache" as Redis '/
+  WB -r- WA : <<HTTPS>>
+  WA -d- APIGW : <<HTTPS>>
+  APIGW -r-  SR
+  APIGW -d-  Services : <<REST>>
+  Services -r- DB
+}
+
+CDN -r- WA
+Services -l- Logs
+Services -d- EmailService : <<SMTP>>
+Services -d- PaymentProvider : <<HTTPS>>
+Services -d- Broker : <<Pub/Sub>>
+Services -l- Redis : <<Cache>>
+
+
+@enduml
