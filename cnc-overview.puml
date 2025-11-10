@@ -8,25 +8,25 @@ skinparam dpi 140
 skinparam shadowing false
 skinparam defaultFontName "Arial"
 skinparam ArrowColor #333
-/' skinparam nodesep 20
-skinparam ranksep 30 '/
+skinparam nodesep 20
+skinparam ranksep 30
 skinparam component { 
   BackgroundColor #eaf6e8
   BorderColor #88b379
 }
 
-title UniversalMarketPlace — Component & Connector View
-
 package "UniversalMarketPlace — Component & Connector View" {
   component "Web Browser" as WB 
   component "Web App" as WA 
+  component "Load Balancer L7" as LB
   component "API Gateway" as APIGW
   component "<<Repository>>\nService Registry" as SR
   component "Services" as Services
   component "<<Repository>>\nUniversal Market\nPlace DB" as DB
 /'   component "Redis cache" as Redis '/
   WB -r- WA : <<HTTPS>>
-  WA -d- APIGW : <<HTTPS>>
+  WA -d- LB : <<HTTPS>>
+  LB -d- APIGW : <<HTTPS>>
   APIGW -r-  SR
   APIGW -d-  Services : <<REST>>
   Services -r- DB

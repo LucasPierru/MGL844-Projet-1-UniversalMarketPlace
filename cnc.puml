@@ -1,71 +1,44 @@
 @startuml Compact_SEI_ECom_CnC_v2
-' Compact SEI-style Component & Connector view (actor-free)
-' DB shown with JDBC access and entity components
-
-left to right direction
-skinparam dpi 140
-/' skinparam componentStyle rectangle '/
+/' skinparam dpi 140 '/
 skinparam shadowing false
 skinparam defaultFontName "Arial"
 skinparam ArrowColor #333
-skinparam nodesep 20
-skinparam ranksep 30
+/' skinparam nodesep 40
+skinparam ranksep 80 '/
 
-title UniversalMarketPlace — Component & Connector View
-
+title UniversalMarketPlace — C&C Services View
 ' System boundary
-component " " as SYS #eaf6e8 {
+rectangle " " as SYS #eaf6e8 {
   skinparam rectangle {
     BackgroundColor #eaf6e8
     BorderColor #88b379
   }
 
-  ' Edge / API row
-  rectangle "API" as API {
-    [LB L7] as LB
-    [API Gateway\n] as APIGW
-  }
+  component "Service\nAuth\n" as AuthSvc
+  component "Service\nCompte\n" as UserSvc
+  component "Service\nProduit\n" as ProductSvc
+  component "Service\nMise\n" as BidSvc
+  component "Service\nTransaction\n" as TxSvc
+  component "Service\nNotification\n" as NotifSvc
 
+  component "Entité Utilisateur" as UserEntity
+  component "Entité Produit" as ProdEntity
+  component "Entité Mises" as BidEntity
+  component "Entité Transaction" as OrderEntity
 
-  rectangle "Services" as Services {
-    component "Servic Auth\n" as AuthSvc
-    component "Service Compte\n" as UserSvc
-    component "Service Produit\n" as ProductSvc
-    component "Service Mise\n" as BidSvc
-    component "Service Transaction\n" as TxSvc
-    component "Service Notification\n" as NotifSvc
-    portout "Redis Cache" as RedisSvc
-  }
-
-
-  ' Workers & infra
-  /' [Worker Pool\n(async jobs)] as Workers '/
-  queue "Message Broker\n(pub/sub, notifications)" as Broker
-
-  ' Database entities
-  rectangle "Entities" as Entities {
-    component "UserEntity" as UserEntity
-    component "ProductEntity" as ProdEntity
-    component "BidEntity" as BidEntity
-    component "OrderEntity" as OrderEntity
-  }
-
+  /' component "Database" as dbport '/
+  
+  queue "Message Broker" as Broker
+  
   ' Ports
-  portout "Database" as dbport
-  portin "Web Client" as webClient
-  portout "Logs" as Logs
-  port "Payment Provider\n(Stripe)" as PaymentExt
-  port " " as CommExt
+  portout "Redis Cache" as RedisSvc
+/'   portout " " as dbport '/
+  portin " " as APIGW
+  port " " as PaymentExt
 }
 ' ---------- Connectors ----------
-' Client to Load Balancer
-webClient --> LB : <<HTTPS>>
-
-' Edge to API
-LB --> APIGW : <<TLS / routing>>
-/' CDN --> APIGW : <<CDN>> '/
 ' Redis
-RedisSvc --> Redis : cache
+RedisSvc --> Redis
 
 ' API to services
 APIGW --> AuthSvc
@@ -73,51 +46,36 @@ APIGW --> UserSvc
 APIGW --> ProductSvc
 APIGW --> BidSvc
 APIGW --> TxSvc
-APIGW --> NotifSvc
 
 ' Services to DB (JDBC arrows labeled)
-AuthSvc -r-> UserEntity
-UserSvc -r-> UserEntity
+AuthSvc -d-> UserEntity
+UserSvc -d-> UserEntity
 ProductSvc --> ProdEntity
 BidSvc --> BidEntity
 TxSvc --> OrderEntity
 
 ' Entities -> DB (explicit, like your example)
-UserEntity -right-> dbport
-ProdEntity -right-> dbport
-BidEntity -right-> dbport
-OrderEntity -right-> dbport
-/' dbport -b-> PostgreSQL '/
+UserEntity -l-> PostgreSQL
+ProdEntity -l-> PostgreSQL
+BidEntity -l-> PostgreSQL
+OrderEntity -l-> PostgreSQL
 
-
+AuthSvc --> RedisSvc
 
 ' Broker (async notification flows)
-BidSvc -[#2E8B57]-> Broker : BidPlacedEvent
-Broker -[#2E8B57]-> NotifSvc : deliver notifications
-NotifSvc -[#2E8B57]-> Broker : subscribe / publish (notifications)
-
-' Supplier accept flow: BidSvc publishes acceptance to Broker which NotifSvc uses to notify client
-BidSvc -[#2E8B57]-> Broker : BidAcceptedEvent
+BidSvc -[#2E8B57]-> Broker
+Broker -[#2E8B57]-> NotifSvc
 
 ' Transaction flow (NO broker between Bid acceptance and TxSvc)
 TxSvc -r-> PaymentExt : <<HTTPS>>
-/' TxSvc -r-> NotifSvc '/
-NotifSvc --> CommExt
-SMTP - CommExt
+PaymentExt -r-> TxSvc
+NotifSvc --> SMTP
+PSP -- PaymentExt
+APIGateway -- APIGW
 
-' Workers for batch jobs (still can consume broker if needed)
-/' Workers --> Broker : consume bkg tasks
-Workers --> dbport : write job results '/
-
-' Minimal notes
-/' note left of BidSvc
-  BidSvc responsibilities:
-  - manage bid lifecycle
-  - publish bid events to Broker for notifications
-end note '/
 
 legend right
-  |=| Solid = synchronous (HTTP/gRPC/JDBC)
+  |=| Solid = synchronous (HTTP)
   |=| Green = asynchronous via Broker (pub/sub)
   |db| = relational DB
 end legend

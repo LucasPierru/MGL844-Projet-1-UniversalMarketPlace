@@ -1,0 +1,72 @@
+@startuml UniversalMarketPlace_ModuleView_FR
+
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam dpi 100
+skinparam defaultFontName "Arial"
+title UniversalMarketPlace — Vue modulaire (Modules du système)
+
+package "Couche API / Frontend" as API #FFFFE0 {
+  [Load Balancer / CDN] as LB
+  [API Gateway\n(point d’entrée HTTP)] as APIGW
+  [Client Web / UI] as UI
+}
+
+package "Modules" as DOMAIN #FFF8D6 {
+  package "Authentification" as AUTH {
+    [Auth Controller]
+    [Auth Service]
+  }
+
+  package "Compte" as ACCOUNT {
+    [Compte Controller]
+    [Compte Service]
+    [Compte Repository]
+  }
+
+  package "Produit" as PRODUCT {
+    [Produit Controller]
+    [Produit Service]
+    [Produit Repository]
+  }
+
+  package "Mise" as BID {
+    [Mise Controller]
+    [Mise Service]
+    [Mise Repository]
+  }
+
+  package "Transaction" as TX {
+    [Transaction Controller]
+    [Transaction Service]
+    [Transaction Repository]
+  }
+
+  package "Notification" as NOTIF {
+    [Notification API]
+    [Notification Worker]
+  }
+}
+
+package "Module Partagé" as SHARED #FFF0D6 {
+  [DTO]
+  [Configurations]
+  [Interfaces Repository]
+}
+
+package "Infrastructure" as INFRA #F3E8FF {
+  [Broker de messages\n(pub/sub)]
+  [Base de données Postgres]
+  [Cache Redis]
+  [Gestionnaire de paiements (Stripe)]
+  [Fournisseur Emails]
+}
+
+
+legend right
+  Jaune = Modules métier
+  Violet = Infrastructure
+  Blanc = API / Edge
+endlegend
+
+@enduml
